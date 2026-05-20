@@ -18,4 +18,5 @@ file structure:
 
 ## Cores:
 
-Nothing to see here yet :)
+- `wb_uart`: Basic 8-bit UART with configurable clock divisor. 
+Baud generated off of wishbone clock.

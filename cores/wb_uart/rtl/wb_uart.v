@@ -21,10 +21,11 @@ module uart #(
     output reg o_ack,
     input wire [7 : 0] i_dat,
     output reg [7 : 0] o_dat,
+    input wire [1:0] i_adr,
 
     // UART interface
     input wire i_uart_rx,
     output reg o_uart_tx
 )
-
+    reg 
 endmodule

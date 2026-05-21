@@ -11,6 +11,7 @@
 
 module uart #(
     parameter integer FIFO_SIZE = 4, // depth is 2**FIFO_SIZE
+    parameter integer INTERRUPT_THRESHOLD = (2**FIFO_SIZE) / 2,
     parameter [15:0] DEFAULT_DIVISOR = 641 // default is 9600 baud for 100MHz
 ) (
     // Wishbone interface
@@ -25,6 +26,14 @@ module uart #(
     output reg [7 : 0] o_dat,
     input wire [1:0] i_adr,
 
+    // interrupts
+    output reg o_rx_ready,
+    output reg o_rx_almost_full,
+    output reg o_rx_full,
+    output reg o_tx_ready,
+    output reg o_tx_almost_empty,
+    output reg o_tx_empty,
+
     // UART interface
     input wire i_uart_rx,
     output reg o_uart_tx
@@ -33,25 +42,27 @@ module uart #(
     reg [15:0] divisor; // baud = clock/(16*divisor)
     reg [7:0] status;
     
-    // RX-related signals
+    // rx-related signals
+    // rx fifo
     reg rx_full;
     reg rx_empty;
-    // rp and wp are one bit larger than the fifo's address size so that the full fifo can be used
     reg [FIFO_SIZE : 0] rx_fifo_rp; // read pointer
     reg [FIFO_SIZE : 0] rx_fifo_wp; // write pointer
     reg [7:0] rx_fifo [0 : 2**FIFO_SIZE - 1];
+    // rx finite state machine
     reg [19:0] rx_clock_counter; // number of i_clk cycles until next sample
     reg [3:0] rx_bit_counter; // number of bits remaining to be received
     reg [7:0] rx_buffer; // serial to parallel shift register
     reg rx_busy; // used by state machine to determine when it's ready for new input
 
     // TX-related signals
+    // tx fifo
     reg tx_full;
     reg tx_empty;
-    // rp and wp are one bit larger than the fifo's address size so that the full fifo can be used
     reg [FIFO_SIZE : 0] tx_fifo_rp; // read pointer
     reg [FIFO_SIZE : 0] tx_fifo_wp; // write pointer
     reg [7:0] tx_fifo [0 : 2**FIFO_SIZE - 1];
+    // tx finite state machine
     reg [19:0] tx_clock_counter; // number of i_clk cycles until next tx transition
     reg [3:0] tx_bit_counter; // number of bits to be transmitted
     reg [8:0] tx_buffer; // parallel to serial shift register
@@ -86,6 +97,26 @@ module uart #(
         if (i_rst) begin
             divisor <= DEFAULT_DIVISOR;
         end
+    
+    // status register logic
+    always @ (*) begin
+        status[0] = rx_empty;
+        status[1] = rx_full;
+        status[2] = tx_empty;
+        status[3] = tx_full;
+        status[7:4] = 0;
+    end
+    
+    // interrupt logic
+    always @ (*) begin
+        o_rx_ready = !rx_empty;
+        o_rx_almost_full = (rx_fifo_wp - rx_fifo_rp) > INTERRUPT_THRESHOLD;
+        o_rx_full = rx_full;
+        
+        o_tx_ready = !tx_full;
+        o_tx_almost_empty = (tx_fifo_wp - tx_fifo_rp) < (2**FIFO_SIZE - INTERRUPT_THRESHOLD);
+        o_tx_empty = tx_full;
+    end
     
     // RX logic
     always @ (*) begin

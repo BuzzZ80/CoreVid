@@ -5,7 +5,7 @@ A collection of Verilog cores, centered around the Wishbone bus.
 Get it? Like, Wishbone? Like... like Corvids have? And also core? :3
 
 This is a personal project to practice and demonstrate my ability to create
-such a system/library in Verilog, as well as write tests in Verilator, and
+such a system/library in Verilog, as well as write tests and
 document core functionality.
 
 # Contents
@@ -19,4 +19,3 @@ file structure:
 ## Cores:
 
 - `wb_uart`: Basic 8-bit UART with configurable clock divisor. 
-Baud generated off of wishbone clock.

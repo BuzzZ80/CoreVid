@@ -9,7 +9,7 @@
 //
 ////////////////////////////////////////////////////////////////////////////////
 
-module uart #(
+module wb_uart #(
     parameter integer FIFO_SIZE = 4, // depth is 2**FIFO_SIZE
     parameter integer INTERRUPT_THRESHOLD = (2**FIFO_SIZE) / 2,
     parameter [15:0] DEFAULT_DIVISOR = 641 // default is 9600 baud for 100MHz
@@ -93,10 +93,6 @@ module uart #(
             3: o_dat = divisor[15:8];
         endcase
     end
-    always @ (posedge i_clk)
-        if (i_rst) begin
-            divisor <= DEFAULT_DIVISOR;
-        end
     
     // status register logic
     always @ (*) begin
@@ -135,40 +131,44 @@ module uart #(
             rx_busy <= 0;
         end
         // handles read requests from wishbone bus
-        else if (i_cyc && i_stb && !i_we) begin
-            // only need to increment read pointer if reading data from addr 0
-            // and if there's data available
-            if (i_adr == 0 && !rx_empty) rx_fifo_rp <= rx_fifo_rp + 1;
-        end
-        
-        // busy flag indicates rx is in the middle of receiving a word
-        if (rx_busy) begin
-            // if all counters have run out, exit to waiting mode
-            if (rx_clock_counter == 0 && rx_bit_counter == 0) begin
-                rx_busy <= 0;
-                
-                // also enqueue rx_buffer, which has not sampled the stop bit
-                rx_fifo[rx_fifo_wp[FIFO_SIZE - 1 : 0]] <= rx_buffer;
-                rx_fifo_wp <= rx_fifo_wp + 1;
+        else begin
+            // handles reads from RX FIFO
+            if (i_cyc && i_stb && !i_we) begin
+                // only need to increment read pointer if reading data from addr 0
+                // and if there's data available
+                if (i_adr == 0 && !rx_empty) rx_fifo_rp <= rx_fifo_rp + 1;
             end
-            // else, transmission is not over - sample when the timer runs out,
-            // reset the timer, and count down the number of bits
-            else if (rx_clock_counter == 0) begin
-                rx_buffer <= {i_uart_rx, rx_buffer[7:1]};
-                rx_clock_counter <= {divisor, 4'b1111};
-                rx_bit_counter <= rx_bit_counter - 1;
+
+            // busy flag indicates rx is in the middle of receiving a word,
+            // so writes to the RX buffer are predecated on this
+            if (rx_busy) begin
+                // if all counters have run out, exit to waiting mode
+                if (rx_clock_counter == 0 && rx_bit_counter == 0) begin
+                    rx_busy <= 0;
+                    
+                    // also enqueue rx_buffer, which has not sampled the stop bit
+                    rx_fifo[rx_fifo_wp[FIFO_SIZE - 1 : 0]] <= rx_buffer;
+                    rx_fifo_wp <= rx_fifo_wp + 1;
+                end
+                // else, transmission is not over - sample when the timer runs out,
+                // reset the timer, and count down the number of bits
+                else if (rx_clock_counter == 0) begin
+                    rx_buffer <= {i_uart_rx, rx_buffer[7:1]};
+                    rx_clock_counter <= {divisor, 4'b1111};
+                    rx_bit_counter <= rx_bit_counter - 1;
+                end
+                // otherwise, just keep counting down the clocks
+                else begin
+                    rx_clock_counter <= rx_clock_counter - 1;
+                end
             end
-            // otherwise, just keep counting down the clocks
-            else begin
-                rx_clock_counter <= rx_clock_counter - 1;
+            // waiting for incoming data on rx line
+            else if (i_uart_rx) begin
+                // wait half the time of one bit the first time, to sample in the middle of each bit
+                rx_clock_counter <= {divisor, 4'b1111} >> 1;
+                rx_bit_counter <= 9;
+                rx_busy <= 1;
             end
-        end
-        // waiting for incoming data on rx line
-        else if (i_uart_rx) begin
-            // wait half the time of one bit the first time, to sample in the middle of each bit
-            rx_clock_counter <= {divisor, 4'b1111} >> 1;
-            rx_bit_counter <= 9;
-            rx_busy <= 1;
         end
     end
     
@@ -183,6 +183,7 @@ module uart #(
     end
     always @ (posedge i_clk) begin
         if (i_rst) begin
+            divisor <= DEFAULT_DIVISOR;
             tx_fifo_rp <= 0;
             tx_fifo_wp <= 0;
             tx_clock_counter <= 0;
@@ -191,43 +192,79 @@ module uart #(
             tx_busy <= 0;
         end
         // handles write requests from wishbone bus
-        else if (i_cyc && i_stb && i_we) begin
-            case (i_adr)
-                // writes to TX fifo only if there's space available
-                0: if (!tx_full) begin
-                    tx_fifo_wp <= tx_fifo_wp + 1;
-                    tx_fifo[tx_fifo_wp[FIFO_SIZE - 1 : 0]] <= i_dat;
-                end
-                // 1: do nothing, there are no control flags
-                2: divisor[7:0] <= i_dat;
-                3: divisor[15:8] <= i_dat;
-            endcase
-        end
+        else begin
+            if (i_cyc && i_stb && i_we) begin
+                case (i_adr)
+                    // writes to TX fifo only if there's space available
+                    0: if (!tx_full) begin
+                        tx_fifo_wp <= tx_fifo_wp + 1;
+                        tx_fifo[tx_fifo_wp[FIFO_SIZE - 1 : 0]] <= i_dat;
+                    end
+                    // 1: do nothing, there are no control flags
+                    2: divisor[7:0] <= i_dat;
+                    3: divisor[15:8] <= i_dat;
+                endcase
+            end
         
-        // Busy flag indicates that FSM is running
-        if (tx_busy) begin
-            // if all timers run out, get ready to send next byte
-            if (tx_clock_counter == 0 && tx_bit_counter == 0) begin
-                tx_busy <= 0;
+            // Busy flag indicates that FSM is running
+            if (tx_busy) begin
+                // if all timers run out, get ready to send next byte
+                if (tx_clock_counter == 0 && tx_bit_counter == 0) begin
+                    tx_busy <= 0;
+                end
+                // if just the clock timer has run out but there are more bits to send
+                else if (tx_clock_counter == 0) begin
+                    tx_buffer <= tx_buffer >> 1;
+                    tx_clock_counter <= {divisor, 4'b1111};
+                    tx_bit_counter <= tx_bit_counter - 1;
+                end
+                else begin
+                    // run clock divider
+                    tx_clock_counter <= tx_clock_counter - 1;
+                end
             end
-            // if just the clock timer has run out but there are more bits to send
-            else if (tx_clock_counter == 0) begin
-                tx_buffer <= tx_buffer >> 1;
+            // If not currently busy, attempt to start a new transmission
+            else if (!tx_empty) begin
+                tx_fifo_rp <= tx_fifo_rp + 1;
                 tx_clock_counter <= {divisor, 4'b1111};
-                tx_bit_counter <= tx_bit_counter - 1;
+                tx_bit_counter <= 9;
+                tx_buffer <= {tx_fifo[tx_fifo_rp], 1'b1}; // byte and start bit
+                tx_busy <= 1;
             end
-            else begin
-                // run clock divider
-                tx_clock_counter <= tx_clock_counter - 1;
-            end
-        end
-        // If not currently busy, attempt to start a new transmission
-        else if (!tx_empty) begin
-            tx_fifo_rp <= tx_fifo_rp + 1;
-            tx_clock_counter <= {divisor, 4'b1111};
-            tx_bit_counter <= 9;
-            tx_buffer <= {tx_fifo[tx_fifo_rp], 1'b1}; // byte and start bit
-            tx_busy <= 1;
         end
     end
+
+    // Formal verification
+    `ifdef FORMAL
+        // Ensures $past() works correctly
+        reg f_past_valid;
+        initial f_past_valid = 0;
+        always @ (posedge i_clk) f_past_valid <= 1;
+
+        // Asserts clk0 is in reset state
+        initial assume(i_rst);
+        always @ (posedge i_clk) if (i_rst) begin
+            assume(~i_cyc && ~i_stb);
+        end
+
+        // Wishbone bus properties
+        always @ (*) begin
+            if (!(i_cyc && i_stb)) assert(!o_ack && !o_rty);
+        end
+
+        // FIFO properties
+        reg [FIFO_SIZE:0] f_tx_num_full; // amount of valid data in TX FIFO
+        reg [FIFO_SIZE:0] f_rx_num_full; // amoutn of valid data in RX FIFO
+        always @ (posedge i_clk) if (~i_rst)begin
+            f_tx_num_full = tx_fifo_wp - tx_fifo_rp;
+            f_rx_num_full = rx_fifo_wp - rx_fifo_rp;
+            assert(f_tx_num_full <= 2**FIFO_SIZE); // data does not exceed size of FIFO
+            assert(f_rx_num_full <= 2**FIFO_SIZE);
+        end
+
+        // basic UART properties
+        always @ (posedge i_clk) if (~i_rst) begin
+            if (f_past_valid && !$past(i_rst) && !tx_busy) assert($stable(o_uart_tx));
+        end
+    `endif
 endmodule

@@ -1,0 +1,14 @@
+[options]
+mode bmc
+depth 30
+
+[engines]
+smtbmc
+
+[script]
+read -formal wb_uart.v 
+hierarchy -check -top wb_uart -chparam FIFO_SIZE 2 -chparam DEFAULT_DIVISOR 1
+prep -top wb_uart 
+
+[files]
+../rtl/wb_uart.v

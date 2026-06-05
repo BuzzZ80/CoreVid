@@ -4,7 +4,7 @@
     wb_uart 1
   ],
 )
-#set text(size: 12pt, font: "Arial")
+#set text(size: 12pt, font: "DejaVu Sans Mono")
 
 #text(size: 25pt, weight: "bold", [CoreVid #sym.dash.em wb_uart])
 
@@ -76,7 +76,7 @@ The factor of 16 is due to the 16x oversampling rate of the RX circuitry.
 #text(size: 18pt, weight: "semibold", [Interrupts:])
 
 #table(
-  columns: (1fr, 3fr),
+  columns: (auto, auto),
   [*Signal Name*], [*Description*],
   [o_rx_ready], [Asserted while the RX queue is not empty.],
   [o_rx_almost_full], [Asserted while the RX queue has more than INTERRUPT_THRESHOLD bytes enqueued.],

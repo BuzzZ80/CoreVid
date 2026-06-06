@@ -13,7 +13,7 @@ Each folder within `/cores/` is one core / design, and has the following
 file structure:
 
 - `rtl/`: Contains the designs themselves, organized by filename
-- `tb/`: Contains tests for designs.
+- `test/`: Contains tests for designs.
 - `docs/`: Contains documentation about using each design.
 
 You can run all tests using `make tests`, or build all docs using `make docs`.

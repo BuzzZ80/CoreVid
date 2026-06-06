@@ -14,4 +14,4 @@ all: wb_bram.pdf
 clean:
 
 wb_bram.pdf: wb_bram.typ
-	typst compile --format pdf wb_bram.typ wb_bram.pdf
+	typst compile --format pdf $< $@

@@ -15,8 +15,7 @@ SBY_SCRIPT := wb_uart.sby
 all: formal
 
 clean: 
-	rm -rf wb_uart
-	rmdir wb_uart
+	rm -rf wb_uart || true
 
 formal: $(SBY_SCRIPT)
-	sby -f $(SBY_SCRIPT)
+	sby -f $^

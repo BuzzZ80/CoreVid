@@ -14,4 +14,4 @@ all: wb_uart.pdf
 clean:
 
 wb_uart.pdf: wb_uart.typ
-	typst compile --format pdf wb_uart.typ wb_uart.pdf
+	typst compile --format pdf $< $@

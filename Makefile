@@ -16,13 +16,17 @@ ALL := $(DOCS) $(TESTS)
 
 all: docs tests
 
-clean: 
+clean: $(ALL)/Makefile
 	for dir in $(ALL); do \
 		$(MAKE) -C $$dir clean; \
 	done
 
 docs: $(DOCS)/Makefile
-	$(MAKE) -C $(DOCS)
+	for dir in $(DOCS); do \
+		$(MAKE) -C $$dir; \
+	done
 
-tests: $(DOCS)/Makefile
-	$(MAKE) -C $(TESTS)
+tests: $(TESTS)/Makefile
+	for dir in $(TESTS); do \
+		$(MAKE) -C $$dir; \
+	done

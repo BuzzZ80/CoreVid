@@ -16,6 +16,9 @@ file structure:
 - `tb/`: Contains tests for designs.
 - `docs/`: Contains documentation about using each design.
 
+You can run all tests using `make tests`, or build all docs using `make docs`.
+Running tests will require SmybiYosys (`sby`), and building docs will require `typst`.
+
 ## Cores:
 
 - `wb_uart`: Basic 8-bit UART with configurable clock divisor. 

@@ -9,7 +9,7 @@
 ################################################################################
 
 DOCS := $(wildcard cores/*/docs)
-TESTS := $(wildcard cores/*/tb)
+TESTS := $(wildcard cores/*/test)
 ALL := $(DOCS) $(TESTS)
 
 .PHONY: all, clean, docs, tests
@@ -17,8 +17,9 @@ ALL := $(DOCS) $(TESTS)
 all: docs tests
 
 clean: 
-	$(MAKE) clean -C $(DOCS)
-	$(MAKE) clean -C $(TESTS)
+	for dir in $(ALL); do \
+		$(MAKE) -C $$dir clean; \
+	done
 
 docs: $(DOCS)/Makefile
 	$(MAKE) -C $(DOCS)

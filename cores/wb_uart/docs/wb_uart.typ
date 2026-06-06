@@ -9,9 +9,12 @@
 #text(size: 25pt, weight: "bold", [CoreVid #sym.dash.em wb_uart])
 
 #line(length:100%)
+A Universal Asynchronous Receiver-Transmitter (UART) with a Wishbone interface
+
+#line(length:100%)
 #v(-2%)
 #text(size: 18pt, weight: "semibold", [Features:])
-- Wishbone interface for data, control, and status
+- Wishbone pipelined interface for data, control, and status
 - One full-duplex asynchronous serial interface
   - 8-bit, no parity, one start and stop bit
   - Runtime-configurable baud rate generator (divides Wishbone clock)
@@ -113,17 +116,15 @@ The factor of 16 is due to the 16x oversampling rate of the RX circuitry.
     [i_stb], [#sym.arrow.l.r.long], [STB_I],
     [i_we], [#sym.arrow.l.r.long], [WE_I],
     [o_ack], [#sym.arrow.l.r.long], [ACK_O],
-    [o_rty], [#sym.arrow.l.r.long], [RTY_O],
+    [o_stall], [#sym.arrow.l.r.long], [STALL_O],
     [i_dat], [#sym.arrow.l.r.long], [DAT_I()],
     [o_dat], [#sym.arrow.l.r.long], [DAT_O()],
     [i_adr], [#sym.arrow.l.r.long], [ADR_I()],
   )],
-  [RTY signal function], [
-    On a read, this indicates that the RX queue is empty. \
-    On a write, this indicates that the TX queue is full.
-  ],
   [Port size \ Port granularity \ Maximum operand size], [8-bit],
   [Data transfer ordering], [BIG/LITTLE ENDIAN],
   [Data transfer sequence],[UNDEFINED],
   [Clock constraints], [None],
 )
+
+This core uses the pipelined handshaking protocol, and supports block and single transfers.

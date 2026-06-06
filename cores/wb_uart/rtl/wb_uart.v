@@ -21,7 +21,7 @@ module wb_uart #(
     input wire i_stb,
     input wire i_we,
     output reg o_ack,
-    output reg o_rty,
+    output reg o_stall,
     input wire [7 : 0] i_dat,
     output reg [7 : 0] o_dat,
     input wire [1:0] i_adr,
@@ -38,6 +38,12 @@ module wb_uart #(
     input wire i_uart_rx,
     output reg o_uart_tx
 );
+    // Wishbone interface registers for handling pipelining
+    reg [7:0] r_i_dat;
+    reg [1:0] r_i_adr;
+    reg r_i_we;
+    reg r_i_stb;
+
     // control/status registers
     reg [15:0] divisor; // baud = clock/(16*divisor)
     reg [7:0] status;
@@ -69,24 +75,32 @@ module wb_uart #(
     reg tx_busy;
 
     // Wishbone interface logic
-    always @ (*) begin
-        // ack/rty response to write access
-        if (i_cyc && i_stb && i_we) begin
-            o_ack = (i_adr == 0) ? !tx_full : 1;
-            o_rty = (i_adr == 0) ? tx_full : 1;
+    always @ (posedge i_clk) begin
+        if (i_rst || !o_stall) begin
+            r_i_dat <= i_dat;
+            r_i_adr <= i_adr;
+            r_i_we <= i_we;
+            r_i_stb <= i_stb && i_cyc;
         end
-        // ack/rty response to read access
-        else if (i_cyc && i_stb && !i_we) begin
-            o_ack = (i_adr == 0) ? !rx_empty : 1;
-            o_rty = (i_adr == 0) ? rx_empty : 1;
+    end
+    always @ (*) begin
+        // ack/stall response to write access
+        if (r_i_stb && r_i_we) begin
+            o_ack = (r_i_adr == 0) ? !tx_full : 1;
+            o_stall = (r_i_adr == 0) ? tx_full : 0;
+        end
+        // ack/stall response to read access
+        else if (r_i_stb && !r_i_we) begin
+            o_ack = (r_i_adr == 0) ? !rx_empty : 1;
+            o_stall = (r_i_adr == 0) ? rx_empty : 0;
         end
         else begin
             o_ack = 0;
-            o_rty = 0;
+            o_stall = 0;
         end
         
         // sets o_dat for reads (doesn't care if it's even being requested)
-        case (i_adr)
+        case (r_i_adr)
             0: o_dat = rx_fifo[rx_fifo_rp[FIFO_SIZE - 1 : 0]];
             1: o_dat = status;
             2: o_dat = divisor[7:0];
@@ -133,10 +147,10 @@ module wb_uart #(
         // handles read requests from wishbone bus
         else begin
             // handles reads from RX FIFO
-            if (i_cyc && i_stb && !i_we) begin
+            if (r_i_stb && !r_i_we) begin
                 // only need to increment read pointer if reading data from addr 0
                 // and if there's data available
-                if (i_adr == 0 && !rx_empty) rx_fifo_rp <= rx_fifo_rp + 1;
+                if (r_i_adr == 0 && !rx_empty) rx_fifo_rp <= rx_fifo_rp + 1;
             end
 
             // busy flag indicates rx is in the middle of receiving a word,
@@ -193,16 +207,16 @@ module wb_uart #(
         end
         // handles write requests from wishbone bus
         else begin
-            if (i_cyc && i_stb && i_we) begin
-                case (i_adr)
+            if (r_i_stb && r_i_we) begin
+                case (r_i_adr)
                     // writes to TX fifo only if there's space available
                     0: if (!tx_full) begin
                         tx_fifo_wp <= tx_fifo_wp + 1;
-                        tx_fifo[tx_fifo_wp[FIFO_SIZE - 1 : 0]] <= i_dat;
+                        tx_fifo[tx_fifo_wp[FIFO_SIZE - 1 : 0]] <= r_i_dat;
                     end
                     // 1: do nothing, there are no control flags
-                    2: divisor[7:0] <= i_dat;
-                    3: divisor[15:8] <= i_dat;
+                    2: divisor[7:0] <= r_i_dat;
+                    3: divisor[15:8] <= r_i_dat;
                 endcase
             end
         
@@ -236,20 +250,34 @@ module wb_uart #(
 
     // Formal verification
     `ifdef FORMAL
+        reg f_past_valid; // ensures $past works correctly
+        integer f_reqs = 0;
+        integer f_acks = 0;
+
+        // keep track of requests and acknowledgements
+        always @ (posedge i_clk) begin
+            if (!o_stall && i_cyc && i_stb) f_reqs <= f_reqs + 1;
+            if (!i_rst && o_ack) f_acks <= f_acks + 1;
+        end
+        // we should never have more acknowledgements than requests
+        always @ (*) begin
+            if (f_reqs > f_acks) assume(i_cyc);
+            assert(f_acks <= f_reqs);
+        end
+
         // Ensures $past() works correctly
-        reg f_past_valid;
         initial f_past_valid = 0;
         always @ (posedge i_clk) f_past_valid <= 1;
 
         // Asserts clk0 is in reset state
         initial assume(i_rst);
         always @ (posedge i_clk) if (i_rst) begin
-            assume(~i_cyc && ~i_stb);
+            assume(~i_cyc);
         end
 
         // Wishbone bus properties
         always @ (*) begin
-            if (!(i_cyc && i_stb)) assert(!o_ack && !o_rty);
+            if (!i_rst && !i_cyc) assert(!o_ack && !o_stall);
         end
 
         // FIFO properties

@@ -1,0 +1,14 @@
+[options]
+mode bmc
+depth 20
+
+[engines]
+smtbmc
+
+[script]
+read -formal wb_bram.v 
+hierarchy -check -top wb_bram
+prep -top wb_bram
+
+[files]
+../rtl/wb_bram.v

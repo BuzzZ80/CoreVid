@@ -15,7 +15,7 @@ SBY_SCRIPT := wb_bram.sby
 all: formal
 
 clean: 
-	rm -rf wb_bram/
+	rm -rf wb_bram
 
 formal: $(SBY_SCRIPT)
 	sby -f $(SBY_SCRIPT)

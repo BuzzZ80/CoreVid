@@ -21,4 +21,5 @@ Running tests will require SmybiYosys (`sby`), and building docs will require `t
 
 ## Cores:
 
-- `wb_uart`: Basic 8-bit UART with configurable clock divisor. 
+- `wb_uart`: Basic 8-bit UART with configurable clock divisor.
+- `wb_bram`: Wishbone wrapper for synchronous Block RAM

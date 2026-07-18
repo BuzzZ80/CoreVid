@@ -1,3 +1,5 @@
+![Logo](/CoreVid.png)
+
 # CoreVid
 
 A collection of Verilog cores, centered around the Wishbone bus.
